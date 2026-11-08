@@ -16,7 +16,7 @@ export function mountArchivePage(container) {
     try {
       const { data, error } = await supabase
         .from('polls')
-        .select('id, created_at, ends_at, poll_options(id, title, year, poster_path)')
+        .select('id, created_at, ends_at, creator_name, poll_options(id, title, year, poster_path)')
         .lte('ends_at', new Date().toISOString())
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -32,7 +32,7 @@ export function mountArchivePage(container) {
         const options = [...(poll.poll_options ?? [])].sort((a, b) => a.title.localeCompare(b.title));
         return `
           <article class="archive-card">
-            <div class="archive-card-heading"><div><p class="eyebrow">Ended ${escapeHtml(formatDate(poll.ends_at))}</p><h2>Movie poll</h2></div><a class="button button-quiet" href="#/poll/${encodeURIComponent(poll.id)}">View results <span aria-hidden="true">→</span></a></div>
+            <div class="archive-card-heading"><div><p class="eyebrow">Ended ${escapeHtml(formatDate(poll.ends_at))}</p><h2>Movie poll</h2><p class="poll-creator">Created by <strong>${escapeHtml(poll.creator_name || 'Movie fan')}</strong></p></div><a class="button button-quiet" href="#/poll/${encodeURIComponent(poll.id)}">View results <span aria-hidden="true">→</span></a></div>
             <div class="archive-movies">${options.map((option) => `
               <div class="archive-movie">
                 ${renderPoster(option.poster_path, option.title, 'w92')}

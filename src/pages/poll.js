@@ -1,15 +1,16 @@
 import {
   fetchPollById,
   fetchPollResults,
-  fetchUserVote,
-  submitVote,
+  fetchUserVotes,
+  submitVotes,
 } from '../pollData.js';
-import { escapeHtml, formatDate, renderPoster, signInPrompt, showSignInPrompt } from './utils.js';
+import { escapeHtml, formatDate, renderPoster, renderVoteChoice, signInPrompt, showSignInPrompt } from './utils.js';
 
 export function mountPollPage(container, id, user) {
   let disposed = false;
   let poll = null;
-  let votedOptionId = null;
+  let votedOptionIds = new Set();
+  let selectedOptionIds = new Set();
   let resultOptions = null;
   let status = '';
   let loadingVote = false;
@@ -20,14 +21,15 @@ export function mountPollPage(container, id, user) {
 
   function renderResults() {
     if (!resultOptions) return '';
-    const total = resultOptions.reduce((sum, option) => sum + option.voteCount, 0);
-    const highest = Math.max(...resultOptions.map((option) => option.voteCount));
-    const winners = total ? new Set(resultOptions.filter((option) => option.voteCount === highest).map((option) => option.id)) : new Set();
+    const total = resultOptions.voterCount;
+    const options = resultOptions.options;
+    const highest = Math.max(0, ...options.map((option) => option.voteCount));
+    const winners = total ? new Set(options.filter((option) => option.voteCount === highest).map((option) => option.id)) : new Set();
     return `
       <section class="results-section" aria-labelledby="results-title">
         <div class="section-heading"><p class="eyebrow">The votes are in</p><h2 id="results-title">Poll results</h2></div>
         <div class="results-list">
-          ${resultOptions.map((option) => {
+          ${options.map((option) => {
             const percentage = total ? Math.round((option.voteCount / total) * 100) : 0;
             const winner = winners.has(option.id);
             return `
@@ -35,8 +37,8 @@ export function mountPollPage(container, id, user) {
                 ${renderPoster(option.poster_path, option.title, 'w92')}
                 <div class="result-main">
                   <div class="result-heading"><h3>${escapeHtml(option.title)}${option.year ? ` <span>(${escapeHtml(option.year)})</span>` : ''}</h3>${winner ? '<span class="winner-label">Winner</span>' : ''}</div>
-                  <div class="result-track" role="progressbar" aria-label="${escapeHtml(option.title)} vote share" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percentage}">
-                    <span style="width: ${percentage}%"></span>
+                  <div class="result-track" role="progressbar" aria-label="${escapeHtml(option.title)} vote share" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(percentage, 100)}">
+                    <span style="width: ${Math.min(percentage, 100)}%"></span>
                   </div>
                 </div>
                 <div class="result-total"><strong>${percentage}%</strong><span>${option.voteCount} ${option.voteCount === 1 ? 'vote' : 'votes'}</span></div>
@@ -44,7 +46,7 @@ export function mountPollPage(container, id, user) {
             `;
           }).join('')}
         </div>
-        <p class="results-total">${total} ${total === 1 ? 'vote' : 'votes'} total</p>
+        <p class="results-total">${total} ${total === 1 ? 'voter' : 'voters'} total</p>
       </section>
     `;
   }
@@ -53,16 +55,17 @@ export function mountPollPage(container, id, user) {
     window.clearInterval(countdownTimer);
     const isEnded = Date.now() >= new Date(poll.ends_at).getTime();
     const options = [...(poll.poll_options ?? [])].sort((a, b) => a.title.localeCompare(b.title));
-    const votedOption = options.find((option) => option.id === votedOptionId);
+    const votedOptions = options.filter((option) => votedOptionIds.has(option.id));
     container.innerHTML = `
       <section class="page-card page-intro poll-page">
         <p class="eyebrow">${isEnded ? 'Poll closed' : 'Cast your vote'}</p>
         <h1>Movie poll</h1>
+        <p class="poll-creator">Created by <strong>${escapeHtml(poll.creator_name || 'Movie fan')}</strong></p>
         <p>Voting ${isEnded ? 'ended' : 'closes'} ${escapeHtml(formatDate(poll.ends_at))}.</p>
         ${!isEnded ? `<p class="poll-detail-countdown">Time remaining: <strong id="poll-time-remaining"></strong></p>` : ''}
         ${status ? `<p class="inline-notice error-notice" role="alert">${escapeHtml(status)}</p>` : ''}
-        ${votedOptionId && votedOption
-          ? `<p class="inline-notice success-notice">You voted for <strong>${escapeHtml(votedOption.title)}</strong>.</p>`
+        ${votedOptions.length
+          ? `<p class="inline-notice success-notice">You voted for <strong>${votedOptions.map((option) => escapeHtml(option.title)).join(', ')}</strong>.</p>`
           : ''}
         <div class="movie-grid">
           ${options.map((option) => `
@@ -71,20 +74,21 @@ export function mountPollPage(container, id, user) {
               <div class="movie-card-info">
                 <h3>${escapeHtml(option.title)}</h3>
                 <p>${option.year ? escapeHtml(option.year) : 'Release year unknown'}</p>
-                ${!isEnded && !votedOptionId && user
-                  ? `<button class="button button-vote" type="button" data-vote="${escapeHtml(option.id)}" ${loadingVote ? 'disabled' : ''}>Vote</button>`
+                ${!isEnded && user
+                  ? renderVoteChoice(option, selectedOptionIds.has(option.id), votedOptionIds.has(option.id), loadingVote)
                   : ''}
               </div>
             </article>
           `).join('')}
         </div>
+        ${!isEnded && user ? `<div class="vote-submit"><p>Select one or more movies.</p><button class="button button-primary" type="button" data-submit-votes ${!hasNewVotes() || loadingVote ? 'disabled' : ''}>${loadingVote ? 'Submitting…' : votedOptionIds.size ? 'Add selected votes' : 'Submit votes'}</button></div>` : ''}
         ${!isEnded && !user ? `<div class="poll-sign-in"><p>Sign in to cast your vote.</p>${signInPrompt()}</div>` : ''}
         ${isEnded
           ? resultOptions
             ? renderResults()
             : `<div class="loading-state" role="status">${status ? escapeHtml(status) : 'Results are not available yet. Checking again shortly…'} <button class="button button-quiet" type="button" data-retry-results>Check results</button></div>`
           : ''}
-        <a class="text-link back-link" href="#/">← Back to this week’s poll</a>
+        <a class="text-link back-link" href="#/">← Back to the active poll</a>
       </section>
     `;
     container.querySelector('[data-sign-in]')?.addEventListener('click', showSignInPrompt);
@@ -113,29 +117,37 @@ export function mountPollPage(container, id, user) {
     }
   }
 
+  function hasNewVotes() {
+    return [...selectedOptionIds].some((optionId) => !votedOptionIds.has(optionId));
+  }
+
+  container.addEventListener('change', (event) => {
+    const checkbox = event.target.closest('[data-option-choice]');
+    if (!checkbox || loadingVote) return;
+    if (checkbox.checked) selectedOptionIds.add(checkbox.dataset.optionChoice);
+    else selectedOptionIds.delete(checkbox.dataset.optionChoice);
+    checkbox.closest('.vote-choice')?.classList.toggle('is-selected', checkbox.checked);
+    const submitButton = container.querySelector('[data-submit-votes]');
+    if (submitButton) submitButton.disabled = !hasNewVotes();
+  });
+
   container.addEventListener('click', async (event) => {
     if (event.target.closest('[data-retry-results]')) {
       status = '';
       loadResults();
       return;
     }
-    const button = event.target.closest('[data-vote]');
-    if (!button || !user || loadingVote) return;
+    const button = event.target.closest('[data-submit-votes]');
+    if (!button || !user || loadingVote || !hasNewVotes()) return;
     loadingVote = true;
     status = '';
     button.disabled = true;
     try {
-      await submitVote(poll.id, button.dataset.vote);
-      votedOptionId = button.dataset.vote;
+      const optionIds = await submitVotes(poll.id, [...selectedOptionIds]);
+      votedOptionIds = new Set(optionIds);
+      selectedOptionIds = new Set(optionIds);
     } catch (error) {
-      if (error.message?.includes('already voted')) {
-        try {
-          votedOptionId = await fetchUserVote(poll.id, user);
-          if (!votedOptionId) status = 'You have already voted in this poll. Refresh the page to see your vote.';
-        } catch {
-          status = 'Your vote was recorded, but we could not load it. Please refresh the page.';
-        }
-      } else if (error.message?.includes('Voting has ended')) {
+      if (error.message?.includes('Voting has ended')) {
         status = 'Voting has ended. Loading the results…';
         poll.ends_at = new Date(Date.now() - 1).toISOString();
         await loadResults();
@@ -173,7 +185,9 @@ export function mountPollPage(container, id, user) {
       }
       if (user) {
         try {
-          votedOptionId = await fetchUserVote(poll.id, user);
+          const optionIds = await fetchUserVotes(poll.id, user);
+          votedOptionIds = new Set(optionIds);
+          selectedOptionIds = new Set(optionIds);
         } catch (error) {
           status = `We couldn't check your vote. ${error.message}`;
         }

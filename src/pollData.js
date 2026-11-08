@@ -1,16 +1,18 @@
 import { supabase } from './supabaseClient.js';
 
-const pollSelection = 'id, created_at, ends_at, poll_options(id, tmdb_id, title, year, poster_path)';
+const pollSelection = 'id, created_at, ends_at, creator_name, poll_options(id, tmdb_id, title, year, poster_path)';
 
 export async function fetchActivePoll() {
   const { data, error } = await supabase
     .from('polls')
     .select(pollSelection)
+    .gt('ends_at', new Date().toISOString())
     .order('created_at', { ascending: false })
-    .limit(10);
+    .limit(1)
+    .maybeSingle();
 
   if (error) throw error;
-  return (data ?? []).find((poll) => new Date(poll.ends_at).getTime() > Date.now()) ?? null;
+  return data;
 }
 
 export async function fetchPollById(id) {
@@ -24,17 +26,17 @@ export async function fetchPollById(id) {
   return data;
 }
 
-export async function fetchUserVote(pollId, user) {
-  if (!user) return null;
+export async function fetchUserVotes(pollId, user) {
+  if (!user) return [];
 
   const { data, error } = await supabase
     .from('votes')
     .select('option_id')
     .eq('poll_id', pollId)
-    .maybeSingle();
+    .eq('user_id', user.id);
 
   if (error) throw error;
-  return data?.option_id ?? null;
+  return (data ?? []).map((vote) => vote.option_id);
 }
 
 export async function fetchPollResults(pollId, options) {
@@ -43,13 +45,17 @@ export async function fetchPollResults(pollId, options) {
 
   const counts = new Map((data ?? []).map((row) => [row.option_id, Number(row.vote_count)]));
   if (!data?.length) return null;
-  return options.map((option) => ({ ...option, voteCount: counts.get(option.id) ?? 0 }));
+  return {
+    options: options.map((option) => ({ ...option, voteCount: counts.get(option.id) ?? 0 })),
+    voterCount: Number(data[0].voter_count),
+  };
 }
 
-export async function submitVote(pollId, optionId) {
-  const { error } = await supabase.rpc('cast_vote', {
+export async function submitVotes(pollId, optionIds) {
+  const { data, error } = await supabase.rpc('cast_vote', {
     poll_id: pollId,
-    option_id: optionId,
+    option_ids: optionIds,
   });
   if (error) throw error;
+  return data;
 }

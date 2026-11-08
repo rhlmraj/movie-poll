@@ -1,14 +1,9 @@
--- Poll weeks use UTC so the site-wide limit follows ISO weeks consistently for all clients.
-
 create table public.polls (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete restrict,
+  creator_name text not null,
   created_at timestamptz not null default now(),
-  ends_at timestamptz not null default (now() + interval '48 hours'),
-  week_start date generated always as (
-    (date_trunc('week', created_at at time zone 'UTC'))::date
-  ) stored,
-  constraint polls_one_per_iso_week unique (week_start)
+  ends_at timestamptz not null default (now() + interval '48 hours')
 );
 
 create table public.poll_options (
@@ -28,7 +23,7 @@ create table public.votes (
   option_id uuid not null,
   user_id uuid not null references auth.users (id) on delete restrict,
   created_at timestamptz not null default clock_timestamp(),
-  constraint votes_one_per_poll_per_user unique (poll_id, user_id),
+  constraint votes_one_per_option_per_user unique (poll_id, user_id, option_id),
   constraint votes_option_belongs_to_poll
     foreign key (poll_id, option_id)
     references public.poll_options (poll_id, id)
@@ -87,12 +82,28 @@ as $$
 declare
   v_user_id uuid := auth.uid();
   v_poll_id uuid;
-  v_constraint_name text;
+  v_creator_name text := 'Movie fan';
 begin
   if v_user_id is null then
     raise exception 'You must be signed in to create a poll'
       using errcode = '42501';
   end if;
+
+  select coalesce((
+    select left(btrim(candidate), 100)
+    from unnest(array[
+      u.raw_user_meta_data ->> 'full_name',
+      u.raw_user_meta_data ->> 'name',
+      u.raw_user_meta_data ->> 'preferred_username',
+      u.raw_user_meta_data ->> 'username'
+    ]) as metadata(candidate)
+    where nullif(btrim(candidate), '') is not null
+      and position('@' in candidate) = 0
+    limit 1
+  ), 'Movie fan')
+  into v_creator_name
+  from auth.users as u
+  where u.id = v_user_id;
 
   if movies is null or jsonb_typeof(movies) <> 'array' then
     raise exception 'A poll must contain between 1 and 5 movies'
@@ -147,8 +158,8 @@ begin
       using errcode = '22023';
   end if;
 
-  insert into public.polls (user_id)
-  values (v_user_id)
+  insert into public.polls (user_id, creator_name)
+  values (v_user_id, v_creator_name)
   returning id into v_poll_id;
 
   insert into public.poll_options (poll_id, tmdb_id, title, year, poster_path)
@@ -161,19 +172,11 @@ begin
   );
 
   return v_poll_id;
-exception
-  when unique_violation then
-    get stacked diagnostics v_constraint_name = constraint_name;
-    if v_constraint_name = 'polls_one_per_iso_week' then
-      raise exception 'A poll has already been created this week'
-        using errcode = '23505';
-    end if;
-    raise;
 end;
 $$;
 
-create or replace function public.cast_vote(poll_id uuid, option_id uuid)
-returns uuid
+create or replace function public.cast_vote(poll_id uuid, option_ids uuid[])
+returns uuid[]
 language plpgsql
 security definer
 set search_path = ''
@@ -181,8 +184,7 @@ as $$
 declare
   v_user_id uuid := auth.uid();
   v_ends_at timestamptz;
-  v_vote_id uuid;
-  v_constraint_name text;
+  v_recorded_option_ids uuid[];
 begin
   if v_user_id is null then
     raise exception 'You must be signed in to vote'
@@ -199,13 +201,31 @@ begin
       using errcode = '22023';
   end if;
 
-  if not exists (
-    select 1
-    from public.poll_options as o
-    where o.id = cast_vote.option_id
-      and o.poll_id = cast_vote.poll_id
+  if option_ids is null or cardinality(option_ids) = 0 then
+    raise exception 'Select at least one movie'
+      using errcode = '22023';
+  end if;
+
+  if array_position(option_ids, null) is not null
+     or cardinality(option_ids) <> (
+       select count(distinct selected.option_id)
+       from unnest(option_ids) as selected(option_id)
+     ) then
+    raise exception 'Each movie can only be selected once'
+      using errcode = '22023';
+  end if;
+
+  if exists (
+    select selected.option_id
+    from unnest(option_ids) as selected(option_id)
+    where not exists (
+      select 1
+      from public.poll_options as o
+      where o.id = selected.option_id
+        and o.poll_id = cast_vote.poll_id
+    )
   ) then
-    raise exception 'The selected option does not belong to this poll'
+    raise exception 'A selected movie does not belong to this poll'
       using errcode = '22023';
   end if;
 
@@ -215,29 +235,29 @@ begin
   end if;
 
   insert into public.votes (poll_id, option_id, user_id)
-  values (cast_vote.poll_id, cast_vote.option_id, v_user_id)
-  returning id into v_vote_id;
+  select cast_vote.poll_id, selected.option_id, v_user_id
+  from unnest(option_ids) as selected(option_id)
+  on conflict (poll_id, user_id, option_id) do nothing;
 
-  return v_vote_id;
-exception
-  when unique_violation then
-    get stacked diagnostics v_constraint_name = constraint_name;
-    if v_constraint_name = 'votes_one_per_poll_per_user' then
-      raise exception 'You have already voted in this poll'
-        using errcode = '23505';
-    end if;
-    raise;
+  select coalesce(array_agg(v.option_id), '{}'::uuid[])
+    into v_recorded_option_ids
+    from public.votes as v
+    where v.poll_id = cast_vote.poll_id
+      and v.user_id = v_user_id;
+
+  return v_recorded_option_ids;
 end;
 $$;
 
 create or replace function public.get_poll_results(poll_id uuid)
-returns table (option_id uuid, vote_count bigint)
+returns table (option_id uuid, vote_count bigint, voter_count bigint)
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
   v_ends_at timestamptz;
+  v_voter_count bigint;
 begin
   select p.ends_at
     into v_ends_at
@@ -248,8 +268,13 @@ begin
     return;
   end if;
 
+  select count(distinct v.user_id)
+    into v_voter_count
+    from public.votes as v
+    where v.poll_id = get_poll_results.poll_id;
+
   return query
-    select o.id, count(v.id)
+    select o.id, count(v.id), v_voter_count
     from public.poll_options as o
     left join public.votes as v
       on v.poll_id = o.poll_id
@@ -268,8 +293,8 @@ grant select on public.votes to authenticated;
 
 -- Poll creation and voting require an authenticated caller; results are public after a poll ends.
 revoke all on function public.create_poll(jsonb) from public, anon, authenticated;
-revoke all on function public.cast_vote(uuid, uuid) from public, anon, authenticated;
+revoke all on function public.cast_vote(uuid, uuid[]) from public, anon, authenticated;
 revoke all on function public.get_poll_results(uuid) from public, anon, authenticated;
 grant execute on function public.create_poll(jsonb) to authenticated;
-grant execute on function public.cast_vote(uuid, uuid) to authenticated;
+grant execute on function public.cast_vote(uuid, uuid[]) to authenticated;
 grant execute on function public.get_poll_results(uuid) to anon, authenticated;

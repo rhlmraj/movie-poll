@@ -31,6 +31,16 @@ export function signInPrompt() {
   return '<button class="button button-primary" type="button" data-sign-in>Sign in with Google</button>';
 }
 
+export function renderVoteChoice(option, checked, alreadyVoted, disabled = false) {
+  const isDisabled = alreadyVoted || disabled;
+  return `
+    <label class="vote-choice${checked ? ' is-selected' : ''}${isDisabled ? ' is-locked' : ''}">
+      <input type="checkbox" data-option-choice="${escapeHtml(option.id)}" aria-label="Vote for ${escapeHtml(option.title)}" ${checked ? 'checked' : ''} ${isDisabled ? 'disabled' : ''} />
+      <span>${alreadyVoted ? 'Voted' : 'Select'}</span>
+    </label>
+  `;
+}
+
 export function showSignInPrompt() {
   window.dispatchEvent(new CustomEvent('movie-poll:sign-in'));
 }

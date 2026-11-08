@@ -106,6 +106,14 @@ h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; }
 .button-vote:hover:not(:disabled) { background: rgb(255 207 101 / 23%); }
 button:disabled { cursor: not-allowed; opacity: .55; }
 .vote-note { display: block; min-height: 34px; color: var(--accent); font-size: 12px; font-weight: 700; }
+.poll-creator { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+.poll-creator strong { color: #f5f3f0; }
+.vote-choice { display: flex; min-height: 36px; align-items: center; gap: 8px; border: 1px solid rgb(255 255 255 / 13%); border-radius: 8px; padding: 6px 9px; color: #d8d5cd; cursor: pointer; font-size: 12px; }
+.vote-choice.is-selected { border-color: rgb(255 207 101 / 35%); background: rgb(255 207 101 / 8%); color: var(--accent); }
+.vote-choice.is-locked { cursor: default; opacity: .8; }
+.vote-choice input { accent-color: var(--accent); }
+.vote-submit { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 14px; margin-top: 16px; }
+.vote-submit p { margin: 0 auto 0 0; color: var(--muted); font-size: 12px; }
 .poll-sign-in, .auth-prompt { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 20px; border: 1px solid rgb(255 255 255 / 8%); border-radius: 12px; padding: 16px; background: rgb(255 255 255 / 2%); }
 .poll-sign-in p { margin: 0; color: var(--muted); font-size: 13px; }
 .inline-notice { margin: 16px 0; border-radius: 9px; padding: 12px 14px; background: rgb(255 255 255 / 4%); color: #d3d0c8; font-size: 13px; line-height: 1.5; }
@@ -139,6 +147,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .archive-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .archive-card-heading .eyebrow { margin-bottom: 5px; }
 .archive-card-heading h2 { margin: 0; font-size: 18px; }
+.archive-card-heading .poll-creator { margin-top: 7px; font-size: 11px; }
 .archive-movies { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .archive-movie { min-width: 0; color: #dedbd4; font-size: 11px; line-height: 1.4; }
 .archive-movie .movie-poster, .archive-movie .poster-placeholder { margin-bottom: 7px; border-radius: 6px; }

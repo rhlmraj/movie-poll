@@ -3,6 +3,22 @@ import { escapeHtml, getPosterUrl, showSignInPrompt } from './utils.js';
 
 const searchEndpoint = 'https://api.themoviedb.org/3/search/movie';
 const apiKey = import.meta.env.VITE_TMDB_API_KEY;
+const draftStoragePrefix = 'movie-poll:create-draft:';
+
+function isValidDraft(value) {
+  return Array.isArray(value)
+    && value.length <= 5
+    && value.every((movie) => movie
+      && Number.isInteger(movie.id)
+      && movie.id > 0
+      && movie.tmdb_id === movie.id
+      && typeof movie.title === 'string'
+      && movie.title.trim().length > 0
+      && movie.title.length <= 300
+      && (movie.year === null || (Number.isInteger(movie.year) && movie.year >= 1870 && movie.year <= 2100))
+      && (movie.poster_path === null || (typeof movie.poster_path === 'string' && /^\/[A-Za-z0-9._-]+$/.test(movie.poster_path))))
+    && new Set(value.map((movie) => movie.id)).size === value.length;
+}
 
 function getYear(movie) {
   const year = movie.release_date?.slice(0, 4);
@@ -13,7 +29,7 @@ export function mountCreatePage(container, user) {
   if (!user) {
     container.innerHTML = `
       <section class="page-card page-intro">
-        <p class="eyebrow">This week's pick</p><h1>Create a movie poll</h1>
+        <p class="eyebrow">New poll</p><h1>Create a movie poll</h1>
         <p>You need to sign in before creating a poll.</p>
         <div class="auth-prompt">${'<button class="button button-primary" type="button" data-sign-in>Sign in with Google</button>'}</div>
       </section>
@@ -22,6 +38,7 @@ export function mountCreatePage(container, user) {
     return () => {};
   }
 
+  const draftKey = `${draftStoragePrefix}${user.id}`;
   let selected = [];
   let results = [];
   let debounceTimer;
@@ -33,9 +50,9 @@ export function mountCreatePage(container, user) {
 
   container.innerHTML = `
     <section class="page-card page-intro create-page">
-      <p class="eyebrow">This week's pick</p>
+      <p class="eyebrow">New poll</p>
       <h1>Create a movie poll</h1>
-      <p>Choose between one and five movies for everyone to vote on. Only one poll can be created each week.</p>
+      <p>Choose between one and five movies for everyone to vote on.</p>
       <div class="create-form">
         <label class="field-label" for="movie-search">Search movies</label>
         <input id="movie-search" class="search-input" type="search" maxlength="120" placeholder="Try a title, like The Grand Budapest Hotel" autocomplete="off" />
@@ -56,6 +73,49 @@ export function mountCreatePage(container, user) {
   const submitButton = container.querySelector('#submit-poll');
   const noticeNode = container.querySelector('#create-notice');
 
+  function saveDraft() {
+    try {
+      localStorage.setItem(draftKey, JSON.stringify(selected));
+      if (notice === 'Your movie picks could not be saved in this browser.') {
+        notice = '';
+        noticeType = '';
+        renderNotice();
+      }
+    } catch (error) {
+      console.error('Unable to save the movie poll draft.', error);
+      notice = 'Your movie picks could not be saved in this browser.';
+      noticeType = 'error';
+      renderNotice();
+    }
+  }
+
+  function clearDraft() {
+    try {
+      localStorage.removeItem(draftKey);
+    } catch (error) {
+      console.error('Unable to clear the movie poll draft.', error);
+      notice = 'Poll created, but the saved draft could not be cleared from this browser.';
+      noticeType = 'error';
+      renderNotice();
+    }
+  }
+
+  try {
+    const savedDraft = localStorage.getItem(draftKey);
+    if (savedDraft) {
+      const parsedDraft = JSON.parse(savedDraft);
+      if (isValidDraft(parsedDraft)) {
+        selected = parsedDraft;
+      } else {
+        localStorage.removeItem(draftKey);
+      }
+    }
+  } catch (error) {
+    console.error('Unable to restore the movie poll draft.', error);
+    notice = 'Your saved movie picks could not be restored in this browser.';
+    noticeType = 'error';
+  }
+
   function renderSelection() {
     countNode.textContent = `(${selected.length}/5)`;
     selectionNode.innerHTML = selected.length
@@ -74,6 +134,23 @@ export function mountCreatePage(container, user) {
     noticeNode.innerHTML = notice
       ? `<p class="inline-notice ${noticeType === 'error' ? 'error-notice' : 'success-notice'}" role="${noticeType === 'error' ? 'alert' : 'status'}">${escapeHtml(notice)}</p>`
       : '';
+  }
+
+  function handleDraftStorage(event) {
+    if (event.key !== draftKey) return;
+    try {
+      if (event.newValue === null) {
+        selected = [];
+      } else {
+        const parsedDraft = JSON.parse(event.newValue);
+        if (!isValidDraft(parsedDraft)) return;
+        selected = parsedDraft;
+      }
+      renderSelection();
+      renderResults();
+    } catch (error) {
+      console.error('Unable to sync the movie poll draft between tabs.', error);
+    }
   }
 
   function renderResults() {
@@ -140,6 +217,9 @@ export function mountCreatePage(container, user) {
     const removeButton = event.target.closest('[data-remove]');
     if (removeButton) {
       selected = selected.filter((movie) => String(movie.id) !== removeButton.dataset.remove);
+      notice = '';
+      noticeType = '';
+      saveDraft();
       renderSelection();
       renderResults();
       return;
@@ -164,6 +244,8 @@ export function mountCreatePage(container, user) {
         poster_path: movie.poster_path ?? null,
       });
       notice = '';
+      noticeType = '';
+      saveDraft();
       renderNotice();
       renderSelection();
       renderResults();
@@ -186,16 +268,15 @@ export function mountCreatePage(container, user) {
         const { data: pollId, error } = await supabase.rpc('create_poll', { movies });
         if (error) throw error;
         if (typeof pollId !== 'string' || !pollId) throw new Error('The poll was created but its link could not be loaded.');
+        clearDraft();
         window.location.hash = `#/poll/${encodeURIComponent(pollId)}`;
       } catch (error) {
         const message = error.message ?? '';
-        notice = message.includes('already been created this week')
-          ? 'A poll has already been created this week. You can vote in the current poll or check the archive.'
-          : message.includes('between 1 and 5 movies')
-            ? 'Please choose between one and five movies.'
-            : message.includes('same TMDB movie')
-              ? 'Each movie in a poll must be different.'
-              : 'We could not create your poll. Please check your connection and try again.';
+        notice = message.includes('between 1 and 5 movies')
+          ? 'Please choose between one and five movies.'
+          : message.includes('same TMDB movie')
+            ? 'Each movie in a poll must be different.'
+            : 'We could not create your poll. Please check your connection and try again.';
         noticeType = 'error';
       } finally {
         submitting = false;
@@ -207,10 +288,13 @@ export function mountCreatePage(container, user) {
     }
   });
 
+  window.addEventListener('storage', handleDraftStorage);
+  renderNotice();
   renderSelection();
   return () => {
     disposed = true;
     window.clearTimeout(debounceTimer);
     activeRequest?.abort();
+    window.removeEventListener('storage', handleDraftStorage);
   };
 }
