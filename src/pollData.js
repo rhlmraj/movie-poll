@@ -53,8 +53,8 @@ export async function fetchPollResults(pollId, options) {
 
 export async function submitVotes(pollId, optionIds) {
   const { data, error } = await supabase.rpc('cast_vote', {
-    poll_id: pollId,
-    option_ids: optionIds,
+    p_poll_id: pollId,
+    p_option_ids: optionIds,
   });
   if (error) throw error;
   return data;

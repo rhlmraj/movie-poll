@@ -159,13 +159,13 @@ export function mountCreatePage(container, user) {
         const title = movie.title || movie.original_title || 'Untitled movie';
         const year = getYear(movie);
         const isSelected = selected.some((item) => item.id === movie.id);
-        const canSelect = !isSelected && selected.length < 5;
+        const canSelect = isSelected || selected.length < 5;
         const posterUrl = getPosterUrl(movie.poster_path, 'w92');
         return `
           <article class="search-result">
             ${posterUrl ? `<img src="${posterUrl}" alt="" loading="lazy" />` : '<div class="result-poster-placeholder" aria-hidden="true">✦</div>'}
             <div class="search-result-info"><h3>${escapeHtml(title)}</h3><p>${year ?? 'Release year unknown'}</p></div>
-            <button class="button button-quiet" type="button" data-select="${movie.id}" ${canSelect ? '' : 'disabled'}>${isSelected ? 'Added' : selected.length >= 5 ? 'Limit reached' : 'Add'}</button>
+            <button class="button button-quiet" type="button" data-select="${movie.id}" ${canSelect ? '' : 'disabled'}>${isSelected ? 'Remove' : selected.length >= 5 ? 'Limit reached' : 'Add'}</button>
           </article>
         `;
       }).join('')
@@ -228,7 +228,18 @@ export function mountCreatePage(container, user) {
     const selectButton = event.target.closest('[data-select]');
     if (selectButton) {
       const movie = results.find((item) => String(item.id) === selectButton.dataset.select);
-      if (!movie || selected.length >= 5 || selected.some((item) => item.id === movie.id)) return;
+      if (!movie) return;
+      if (selected.some((item) => item.id === movie.id)) {
+        selected = selected.filter((item) => item.id !== movie.id);
+        notice = '';
+        noticeType = '';
+        saveDraft();
+        renderNotice();
+        renderSelection();
+        renderResults();
+        return;
+      }
+      if (selected.length >= 5) return;
       const title = (movie.title || movie.original_title || '').trim();
       if (!title || title.length > 300) {
         notice = 'This movie has a title that cannot be added to a poll.';

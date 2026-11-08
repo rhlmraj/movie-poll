@@ -94,8 +94,10 @@ begin
     from unnest(array[
       u.raw_user_meta_data ->> 'full_name',
       u.raw_user_meta_data ->> 'name',
+      u.raw_user_meta_data ->> 'display_name',
       u.raw_user_meta_data ->> 'preferred_username',
-      u.raw_user_meta_data ->> 'username'
+      u.raw_user_meta_data ->> 'username',
+      concat_ws(' ', u.raw_user_meta_data ->> 'given_name', u.raw_user_meta_data ->> 'family_name')
     ]) as metadata(candidate)
     where nullif(btrim(candidate), '') is not null
       and position('@' in candidate) = 0
@@ -175,7 +177,7 @@ begin
 end;
 $$;
 
-create or replace function public.cast_vote(poll_id uuid, option_ids uuid[])
+create or replace function public.cast_vote(p_poll_id uuid, p_option_ids uuid[])
 returns uuid[]
 language plpgsql
 security definer
@@ -194,22 +196,22 @@ begin
   select p.ends_at
     into v_ends_at
     from public.polls as p
-    where p.id = cast_vote.poll_id;
+    where p.id = p_poll_id;
 
   if not found then
     raise exception 'Poll not found'
       using errcode = '22023';
   end if;
 
-  if option_ids is null or cardinality(option_ids) = 0 then
+  if p_option_ids is null or cardinality(p_option_ids) = 0 then
     raise exception 'Select at least one movie'
       using errcode = '22023';
   end if;
 
-  if array_position(option_ids, null) is not null
-     or cardinality(option_ids) <> (
+  if array_position(p_option_ids, null) is not null
+     or cardinality(p_option_ids) <> (
        select count(distinct selected.option_id)
-       from unnest(option_ids) as selected(option_id)
+       from unnest(p_option_ids) as selected(option_id)
      ) then
     raise exception 'Each movie can only be selected once'
       using errcode = '22023';
@@ -217,12 +219,12 @@ begin
 
   if exists (
     select selected.option_id
-    from unnest(option_ids) as selected(option_id)
+    from unnest(p_option_ids) as selected(option_id)
     where not exists (
       select 1
       from public.poll_options as o
       where o.id = selected.option_id
-        and o.poll_id = cast_vote.poll_id
+        and o.poll_id = p_poll_id
     )
   ) then
     raise exception 'A selected movie does not belong to this poll'
@@ -235,14 +237,14 @@ begin
   end if;
 
   insert into public.votes (poll_id, option_id, user_id)
-  select cast_vote.poll_id, selected.option_id, v_user_id
-  from unnest(option_ids) as selected(option_id)
+  select p_poll_id, selected.option_id, v_user_id
+  from unnest(p_option_ids) as selected(option_id)
   on conflict (poll_id, user_id, option_id) do nothing;
 
   select coalesce(array_agg(v.option_id), '{}'::uuid[])
     into v_recorded_option_ids
     from public.votes as v
-    where v.poll_id = cast_vote.poll_id
+    where v.poll_id = p_poll_id
       and v.user_id = v_user_id;
 
   return v_recorded_option_ids;

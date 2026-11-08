@@ -25,8 +25,10 @@ function getDisplayName(user) {
   const metadata = user?.user_metadata ?? {};
   const candidate = metadata.full_name
     || metadata.name
+    || metadata.display_name
     || metadata.preferred_username
-    || metadata.username;
+    || metadata.username
+    || [metadata.given_name, metadata.family_name].filter(Boolean).join(' ');
 
   if (typeof candidate === 'string' && candidate.trim() && !candidate.includes('@')) {
     return candidate.trim();
