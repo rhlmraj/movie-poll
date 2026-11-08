@@ -95,12 +95,12 @@ begin
   end if;
 
   if movies is null or jsonb_typeof(movies) <> 'array' then
-    raise exception 'A poll must contain exactly 5 movies'
+    raise exception 'A poll must contain between 1 and 5 movies'
       using errcode = '22023';
   end if;
 
-  if jsonb_array_length(movies) <> 5 then
-    raise exception 'A poll must contain exactly 5 movies'
+  if jsonb_array_length(movies) < 1 or jsonb_array_length(movies) > 5 then
+    raise exception 'A poll must contain between 1 and 5 movies'
       using errcode = '22023';
   end if;
 
@@ -142,7 +142,7 @@ begin
   if (
     select count(distinct movie.value ->> 'tmdb_id')
     from jsonb_array_elements(movies) as movie(value)
-  ) <> 5 then
+  ) <> jsonb_array_length(movies) then
     raise exception 'A poll cannot contain the same TMDB movie more than once'
       using errcode = '22023';
   end if;

@@ -35,14 +35,14 @@ export function mountCreatePage(container, user) {
     <section class="page-card page-intro create-page">
       <p class="eyebrow">This week's pick</p>
       <h1>Create a movie poll</h1>
-      <p>Find five movies for everyone to vote on. Only one poll can be created each week.</p>
+      <p>Choose between one and five movies for everyone to vote on. Only one poll can be created each week.</p>
       <div class="create-form">
         <label class="field-label" for="movie-search">Search movies</label>
         <input id="movie-search" class="search-input" type="search" maxlength="120" placeholder="Try a title, like The Grand Budapest Hotel" autocomplete="off" />
         <p class="field-hint">Search powered by The Movie Database (TMDB).</p>
         <div id="search-results" class="search-results" aria-live="polite"></div>
         <div class="selection-heading"><h2>Your picks <span id="selection-count">(0/5)</span></h2></div>
-        <div id="selected-movies" class="selected-movies"><p class="selection-empty">Choose five movies to create your poll.</p></div>
+        <div id="selected-movies" class="selected-movies"><p class="selection-empty">Choose at least one movie to create your poll.</p></div>
         <div id="create-notice" aria-live="polite"></div>
         <button id="submit-poll" class="button button-primary submit-poll" type="button" disabled>Create poll</button>
       </div>
@@ -65,8 +65,8 @@ export function mountCreatePage(container, user) {
           <button type="button" data-remove="${movie.id}" aria-label="Remove ${escapeHtml(movie.title)}">×</button>
         </span>
       `).join('')
-      : '<p class="selection-empty">Choose five movies to create your poll.</p>';
-    submitButton.disabled = selected.length !== 5 || submitting;
+      : '<p class="selection-empty">Choose at least one movie to create your poll.</p>';
+    submitButton.disabled = selected.length === 0 || submitting;
     submitButton.textContent = submitting ? 'Creating poll…' : 'Create poll';
   }
 
@@ -171,7 +171,7 @@ export function mountCreatePage(container, user) {
     }
 
     if (event.target.closest('#submit-poll')) {
-      if (selected.length !== 5 || submitting) return;
+      if (selected.length === 0 || submitting) return;
       submitting = true;
       notice = '';
       renderNotice();
@@ -191,8 +191,8 @@ export function mountCreatePage(container, user) {
         const message = error.message ?? '';
         notice = message.includes('already been created this week')
           ? 'A poll has already been created this week. You can vote in the current poll or check the archive.'
-          : message.includes('exactly 5 movies')
-            ? 'Please choose exactly five different movies.'
+          : message.includes('between 1 and 5 movies')
+            ? 'Please choose between one and five movies.'
             : message.includes('same TMDB movie')
               ? 'Each movie in a poll must be different.'
               : 'We could not create your poll. Please check your connection and try again.';

@@ -13,7 +13,7 @@ export function mountHomePage(container, user) {
   container.innerHTML = `
     <section class="hero page-card">
       <p class="eyebrow">A little friendly competition</p>
-      <h1>Pick your five.<br /><span>Let the votes decide.</span></h1>
+      <h1>Pick your movies.<br /><span>Let the votes decide.</span></h1>
       <p class="hero-copy">Create a weekly movie poll, share it with friends, and find out which film wins.</p>
       <a class="button button-primary" href="#/create">Create a poll <span aria-hidden="true">→</span></a>
     </section>
@@ -27,7 +27,7 @@ export function mountHomePage(container, user) {
     <section class="how-it-works" aria-labelledby="how-title">
       <div class="section-heading"><p class="eyebrow">How it works</p><h2 id="how-title">Your next movie night, sorted.</h2></div>
       <div class="steps-grid">
-        <article class="step-card"><span class="step-number">01</span><h3>Choose five</h3><p>Put together a shortlist of movies for everyone to consider.</p></article>
+        <article class="step-card"><span class="step-number">01</span><h3>Choose up to five</h3><p>Put together a shortlist of one to five movies for everyone to consider.</p></article>
         <article class="step-card"><span class="step-number">02</span><h3>Share the poll</h3><p>Invite friends to vote for the movie they want to watch.</p></article>
         <article class="step-card"><span class="step-number">03</span><h3>Watch the winner</h3><p>When voting closes, the group's pick is ready for movie night.</p></article>
       </div>
