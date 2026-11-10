@@ -85,7 +85,7 @@ function render() {
       <footer class="site-footer">
         <p>This product uses the TMDB API but is not endorsed or certified by TMDB. <a href="./privacy.html">Privacy policy</a></p>
         <a class="tmdb-link" href="https://www.themoviedb.org/" target="_blank" rel="noreferrer" aria-label="Visit The Movie Database">
-          <img src="https://www.themoviedb.org/assets/2/v4/logos/blue_short.svg" alt="The Movie Database (TMDB)" />
+          <img src="https://www.themoviedb.org/assets/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg" alt="The Movie Database (TMDB)" />
         </a>
       </footer>
       ${authMessage ? `<div class="status-message status-${authMessageType}" role="status">${escapeHtml(authMessage)}</div>` : ''}
