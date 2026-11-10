@@ -2,17 +2,15 @@ import { supabase } from './supabaseClient.js';
 
 const pollSelection = 'id, created_at, ends_at, creator_name, poll_options(id, tmdb_id, title, year, poster_path)';
 
-export async function fetchActivePoll() {
+export async function fetchActivePolls() {
   const { data, error } = await supabase
     .from('polls')
     .select(pollSelection)
     .gt('ends_at', new Date().toISOString())
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data;
+  return data ?? [];
 }
 
 export async function fetchPollById(id) {

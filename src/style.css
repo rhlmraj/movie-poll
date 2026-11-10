@@ -89,6 +89,9 @@ h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; }
 .text-link { display: inline-block; margin-top: 12px; color: var(--accent); }
 .active-poll-section { padding-top: 54px; }
 .active-poll-section .section-heading { margin-bottom: 20px; }
+.active-poll-list { display: grid; gap: 18px; }
+.active-poll-card { min-width: 0; border: 1px solid rgb(255 255 255 / 8%); border-radius: 14px; padding: 18px; background: rgb(255 255 255 / 2%); }
+.active-poll-card-title { margin: 0 0 8px; font-size: 18px; }
 .loading-state, .empty-search { border: 1px solid rgb(255 255 255 / 8%); border-radius: 12px; padding: 22px; color: var(--muted); background: rgb(255 255 255 / 2%); font-size: 13px; }
 .error-state { border: 1px solid rgb(214 95 95 / 30%); border-radius: 12px; padding: 22px; background: rgb(105 37 37 / 12%); }
 .error-state > p:first-child { margin-bottom: 8px; color: #ffdada; font-weight: 700; }
@@ -196,6 +199,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .hero-copy { font-size: 14px; }
   .how-it-works { padding-top: 38px; }
   .active-poll-section { padding-top: 38px; }
+  .active-poll-card { padding: 12px; }
   .steps-grid { grid-template-columns: 1fr; }
   .step-card { min-height: 0; }
   .step-card h3 { margin-top: 10px; }
