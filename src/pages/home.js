@@ -1,5 +1,9 @@
 import { fetchActivePolls, fetchUserVotes, submitVotes } from '../pollData.js';
-import { escapeHtml, formatDate, renderPoster, renderVoteChoice, signInPrompt, showSignInPrompt } from './utils.js';
+import { escapeHtml, formatDate, getPosterUrl, renderPoster, renderVoteChoice, signInPrompt, showSignInPrompt } from './utils.js';
+
+const KEYWORD = 'padathinuvarunno';
+const LETTERBOXD_PROXY_URL = import.meta.env.VITE_LETTERBOXD_PROXY_URL;
+const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY;
 
 export function mountHomePage(container, user) {
   let disposed = false;
@@ -19,17 +23,154 @@ export function mountHomePage(container, user) {
       </div>
       <div id="active-poll-content"><div class="loading-state" role="status">Finding active polls…</div></div>
     </section>
-    <section class="how-it-works" aria-labelledby="how-title">
-      <div class="section-heading"><p class="eyebrow">How it works</p><h2 id="how-title">Your next movie night, sorted.</h2></div>
-      <div class="steps-grid">
-        <article class="step-card"><span class="step-number">01</span><h3>Choose up to five</h3><p>Put together a shortlist of one to five movies for everyone to consider.</p></article>
-        <article class="step-card"><span class="step-number">02</span><h3>Share the poll</h3><p>Invite friends to vote for the movies they want to watch.</p></article>
-        <article class="step-card"><span class="step-number">03</span><h3>Watch the winners</h3><p>When voting closes, the group's favorites are ready for movie night.</p></article>
+    <section class="featured-movies" aria-labelledby="featured-movies-title">
+      <div class="section-heading"><h2 id="featured-movies-title">Featured movies</h2></div>
+      <div class="featured-poster-grid" aria-label="Movie poster placeholders">
+        <div class="featured-poster-slot" role="img" aria-label="Movie poster slot 1"></div>
+        <div class="featured-poster-slot" role="img" aria-label="Movie poster slot 2"></div>
+        <div class="featured-poster-slot" role="img" aria-label="Movie poster slot 3"></div>
       </div>
+      <a class="button button-primary featured-movies-more" href="https://letterboxd.com/sarath_mohan/list/movie-of-the-weeks/" target="_blank" rel="noreferrer">See more <span aria-hidden="true">→</span></a>
     </section>
   `;
 
   const content = container.querySelector('#active-poll-content');
+  const featuredSection = container.querySelector('.featured-movies');
+  const featuredSlots = [...featuredSection.querySelectorAll('.featured-poster-slot')];
+
+  function setFeaturedSlotMessage(slot, message, state) {
+    slot.replaceChildren();
+    slot.setAttribute('class', `featured-poster-slot is-${state}`);
+    slot.setAttribute('role', 'status');
+    slot.removeAttribute('aria-label');
+    slot.textContent = message;
+  }
+
+  function resetFeaturedSlot(slot, index) {
+    slot.replaceChildren();
+    slot.setAttribute('class', 'featured-poster-slot');
+    slot.setAttribute('role', 'img');
+    slot.setAttribute('aria-label', `Movie poster slot ${index + 1}`);
+  }
+
+  function getItemChildText(item, localName) {
+    const element = [...item.children].find((child) => child.localName === localName);
+    return element?.textContent.trim() ?? '';
+  }
+
+  function getFeaturedEntries(xml) {
+    const documentNode = new DOMParser().parseFromString(xml, 'application/xml');
+    if (documentNode.querySelector('parsererror')) {
+      throw new Error('The Letterboxd feed was not valid XML.');
+    }
+
+    const seenIds = new Set();
+    const entries = [];
+    for (const item of documentNode.getElementsByTagName('item')) {
+      if (!item.textContent.toLowerCase().includes(KEYWORD)) continue;
+
+      const movieIdElement = [...item.getElementsByTagName('*')]
+        .find((element) => element.localName === 'movieId');
+      const movieId = movieIdElement?.textContent.trim();
+      if (!movieId || seenIds.has(movieId)) continue;
+
+      seenIds.add(movieId);
+      entries.push({
+        movieId,
+        letterboxdUrl: getItemChildText(item, 'link'),
+      });
+      if (entries.length === featuredSlots.length) break;
+    }
+    return entries;
+  }
+
+  function renderFeaturedMovie(slot, entry, movie) {
+    const title = movie.title.trim();
+    const year = /^\d{4}$/.test(movie.release_date?.slice(0, 4) ?? '')
+      ? movie.release_date.slice(0, 4)
+      : 'Release year unknown';
+    const titleAndYear = `${title} (${year})`;
+    const letterboxdUrl = new URL(entry.letterboxdUrl);
+    if (letterboxdUrl.protocol !== 'https:'
+      || (letterboxdUrl.hostname !== 'letterboxd.com' && !letterboxdUrl.hostname.endsWith('.letterboxd.com'))) {
+      throw new Error('The Letterboxd feed contained an invalid movie link.');
+    }
+    const posterUrl = getPosterUrl(movie.poster_path, 'w342');
+    if (!posterUrl) throw new Error('TMDB returned an invalid poster path.');
+
+    slot.replaceChildren();
+    slot.setAttribute('class', 'featured-poster-slot is-filled');
+    slot.setAttribute('role', 'group');
+    slot.setAttribute('aria-label', titleAndYear);
+
+    const link = document.createElement('a');
+    link.setAttribute('href', letterboxdUrl.href);
+    link.setAttribute('target', '_blank');
+    link.setAttribute('rel', 'noreferrer');
+    const poster = document.createElement('img');
+    poster.setAttribute('src', posterUrl);
+    poster.setAttribute('alt', titleAndYear);
+    poster.setAttribute('loading', 'lazy');
+    link.append(poster);
+    slot.append(link);
+
+    const caption = document.createElement('p');
+    caption.setAttribute('class', 'featured-poster-caption');
+    caption.textContent = titleAndYear;
+    slot.append(caption);
+  }
+
+  async function loadFeaturedMovies() {
+    featuredSlots.forEach((slot) => setFeaturedSlotMessage(slot, 'Loading…', 'loading'));
+    try {
+      if (!LETTERBOXD_PROXY_URL) {
+        throw new Error('The Letterboxd feed is not configured.');
+      }
+      if (!TMDB_API_KEY) {
+        throw new Error('Movie poster lookup is not configured.');
+      }
+
+      const feedResponse = await fetch(LETTERBOXD_PROXY_URL);
+      if (!feedResponse.ok) throw new Error(`The Letterboxd feed returned ${feedResponse.status}.`);
+      const entries = getFeaturedEntries(await feedResponse.text());
+      if (disposed) return;
+
+      featuredSlots.forEach(resetFeaturedSlot);
+      if (!entries.length) {
+        const message = document.createElement('p');
+        message.setAttribute('class', 'featured-movies-empty');
+        message.textContent = 'No recent entries found';
+        featuredSection.insertBefore(message, featuredSection.querySelector('.featured-movies-more'));
+        return;
+      }
+
+      entries.forEach((_, index) => setFeaturedSlotMessage(featuredSlots[index], 'Loading…', 'loading'));
+      const movies = await Promise.all(entries.map(async ({ movieId }) => {
+        const response = await fetch(
+          `https://api.themoviedb.org/3/movie/${encodeURIComponent(movieId)}?api_key=${encodeURIComponent(TMDB_API_KEY)}`,
+        );
+        if (!response.ok) throw new Error(`TMDB returned ${response.status}.`);
+        const movie = await response.json();
+        if (typeof movie.title !== 'string' || !movie.title.trim() || !movie.poster_path) {
+          throw new Error('TMDB did not return a title and poster for a selected movie.');
+        }
+        return movie;
+      }));
+      if (disposed) return;
+
+      entries.forEach((entry, index) => renderFeaturedMovie(featuredSlots[index], entry, movies[index]));
+    } catch {
+      if (disposed) return;
+      featuredSlots.forEach(resetFeaturedSlot);
+      setFeaturedSlotMessage(featuredSlots[0], 'Could not load recent movies. Please try again later.', 'error');
+    }
+  }
+
+  const attribution = document.createElement('p');
+  attribution.setAttribute('class', 'featured-movies-attribution');
+  attribution.textContent = 'Data from Letterboxd · Posters from TMDB';
+  featuredSection.append(attribution);
+  loadFeaturedMovies();
 
   function renderPoll(state) {
     window.clearInterval(state.countdownTimer);

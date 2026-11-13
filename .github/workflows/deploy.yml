@@ -39,9 +39,10 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_TMDB_API_KEY: ${{ secrets.VITE_TMDB_API_KEY }}
+          VITE_LETTERBOXD_PROXY_URL: ${{ secrets.VITE_LETTERBOXD_PROXY_URL }}
         run: |
           missing=0
-          for name in VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY VITE_TMDB_API_KEY; do
+          for name in VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY VITE_TMDB_API_KEY VITE_LETTERBOXD_PROXY_URL; do
             if [ -z "${!name}" ]; then
               echo "::error::Missing repository secret: ${name}"
               missing=1
@@ -55,6 +56,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_TMDB_API_KEY: ${{ secrets.VITE_TMDB_API_KEY }}
+          VITE_LETTERBOXD_PROXY_URL: ${{ secrets.VITE_LETTERBOXD_PROXY_URL }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
