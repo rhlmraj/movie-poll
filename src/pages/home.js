@@ -24,11 +24,13 @@ export function mountHomePage(container, user) {
       <div id="active-poll-content"><div class="loading-state" role="status">Finding active polls…</div></div>
     </section>
     <section class="featured-movies" aria-labelledby="featured-movies-title">
-      <div class="section-heading"><h2 id="featured-movies-title">Featured movies</h2></div>
+      <div class="section-heading"><h2 id="featured-movies-title">Latest screenings</h2></div>
       <div class="featured-poster-grid" aria-label="Movie poster placeholders">
         <div class="featured-poster-slot" role="img" aria-label="Movie poster slot 1"></div>
         <div class="featured-poster-slot" role="img" aria-label="Movie poster slot 2"></div>
         <div class="featured-poster-slot" role="img" aria-label="Movie poster slot 3"></div>
+        <div class="featured-poster-slot" role="img" aria-label="Movie poster slot 4"></div>
+        <div class="featured-poster-slot" role="img" aria-label="Movie poster slot 5"></div>
       </div>
       <a class="button button-primary featured-movies-more" href="https://letterboxd.com/sarath_mohan/list/movie-of-the-weeks/" target="_blank" rel="noreferrer">See more <span aria-hidden="true">→</span></a>
     </section>

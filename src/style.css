@@ -75,7 +75,7 @@ h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; }
 .featured-movies { padding-top: 54px; text-align: center; }
 .section-heading { margin-bottom: 22px; }
 .section-heading h2 { margin-bottom: 0; font-size: clamp(23px, 4vw, 32px); letter-spacing: -.035em; }
-.featured-poster-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.featured-poster-grid { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 14px; overflow-x: auto; }
 .featured-poster-slot { display: grid; aspect-ratio: 2 / 3; overflow: hidden; place-items: center; border: 1px dashed rgb(255 255 255 / 15%); border-radius: 13px; background: linear-gradient(145deg, rgb(255 255 255 / 3%), rgb(255 255 255 / 1%)); color: var(--muted); font-size: 13px; }
 .featured-poster-slot.is-filled { display: block; aspect-ratio: auto; border-style: solid; text-align: left; }
 .featured-poster-slot.is-filled a, .featured-poster-slot.is-filled img { display: block; width: 100%; }
